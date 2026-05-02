@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Lenovo\\\\source\\\\repos\\\\playground\" -Recurse -File)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(grep -E \"\\\\.\\(js|ts|jsx|tsx|html|css\\)$\")"
+    ]
+  }
+}

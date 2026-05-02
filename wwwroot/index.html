@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oyun Alanı Dashboard</title>
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="googlebot" content="noindex, nofollow">
+  <meta name="bingbot" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #08090d;
+      --s1:     #0f1014;
+      --s2:     #16171d;
+      --s3:     #1d1e26;
+      --b1:     rgba(255,255,255,0.06);
+      --b2:     rgba(255,255,255,0.11);
+      --b3:     rgba(255,255,255,0.18);
+      --txt:    #eeeef3;
+      --muted:  #5a5a72;
+      --muted2: #8888a0;
+      --green:  #34c759;
+      --orange: #f97316;
+      --red:    #dc2626;
+      --font:   'Sora', sans-serif;
+      --mono:   'JetBrains Mono', monospace;
+    }
+
+    body { background: var(--bg); color: var(--txt); font-family: var(--font); min-height: 100vh; }
+    input, select, button, textarea { font-family: var(--font); }
+
+    @keyframes pulse-red  { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)} 60%{box-shadow:0 0 0 10px rgba(220,38,38,0)} }
+    @keyframes blink-row  { 0%,100%{background:rgba(220,38,38,.07)} 50%{background:rgba(220,38,38,.18)} }
+    @keyframes fadein     { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes modal-in   { from{opacity:0;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
+
+    /* ── Admin layout ─────────────────────────────────── */
+    #admin-layout  { min-height:100vh; display:flex; flex-direction:column; }
+    #admin-header  { height:54px; padding:0 24px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; background:var(--s1); border-bottom:1px solid var(--b1); }
+    #admin-body    { display:flex; flex:1; overflow:hidden; }
+    #admin-sidebar { width:280px; flex-shrink:0; background:var(--s1); border-right:1px solid var(--b1); padding:22px 18px; display:flex; flex-direction:column; gap:14px; overflow-y:auto; }
+    #admin-main    { flex:1; padding:20px 22px; overflow-y:auto; }
+
+    /* ── Form elements ────────────────────────────────── */
+    .lbl { font-size:10px; font-weight:600; letter-spacing:.1em; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
+    .inp { width:100%; padding:9px 12px; background:var(--s2); border:1px solid var(--b2); border-radius:8px; color:var(--txt); font-size:13px; outline:none; transition:border-color .15s; }
+    .inp:focus { border-color:var(--b3); }
+
+    .btn-add { width:100%; padding:11px 0; background:linear-gradient(135deg,#6c63ff,#a78bfa); border:none; border-radius:10px; color:#fff; font-size:13px; font-weight:600; cursor:pointer; transition:opacity .2s; }
+    .btn-add:hover    { opacity:.85; }
+    .btn-add:disabled { background:var(--s3); color:var(--muted); opacity:1; cursor:default; }
+
+    .stat-pill { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:var(--s2); border-radius:8px; border:1px solid var(--b1); }
+    .stat-lbl  { font-size:12px; color:var(--muted2); }
+    .stat-val  { font-size:17px; font-family:var(--mono); font-weight:600; }
+
+    .divider { border:none; border-top:1px solid var(--b1); margin:2px 0; }
+
+    /* ── Admin list ───────────────────────────────────── */
+    /* columns: # | dot | name+guardian | bar | timer | actions */
+    .col-hdr  { display:grid; grid-template-columns:28px 10px 1fr 160px 100px auto; gap:14px; padding:0 16px; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:4px; }
+    .child-row { display:grid; grid-template-columns:28px 10px 1fr 160px 100px auto; align-items:center; gap:14px; padding:13px 16px; border-radius:11px; background:var(--s2); border:1px solid var(--b1); margin-bottom:7px; animation:fadein .3s ease both; }
+    .child-row.expired { background:rgba(220,38,38,.07); border-color:rgba(220,38,38,.22); animation:blink-row 2s infinite, fadein .3s ease both; }
+
+    .bar-track { width:100%; height:5px; background:rgba(255,255,255,.08); border-radius:5px; overflow:hidden; }
+    .bar-fill  { height:100%; border-radius:5px; transition:width 1s linear, background 2s ease; }
+    .bar-lbls  { display:flex; justify-content:space-between; font-size:9px; color:var(--muted); margin-top:4px; }
+
+    .dot  { width:9px; height:9px; border-radius:50%; flex-shrink:0; display:inline-block; }
+    .rank { font-size:12px; font-family:var(--mono); color:var(--muted); text-align:right; }
+
+    .timer       { font-family:var(--mono); font-size:20px; font-weight:600; text-align:right; letter-spacing:-.02em; }
+    .timer.doldu { font-size:13px; padding:3px 8px; background:rgba(220,38,38,.15); border-radius:6px; color:var(--red); animation:pulse-red 1.4s infinite; }
+
+    /* Action buttons */
+    .row-actions  { display:flex; gap:6px; align-items:center; justify-content:flex-end; }
+
+    .btn-edit { width:30px; height:30px; border-radius:7px; background:transparent; border:1px solid var(--b2); color:var(--muted2); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; transition:all .15s; flex-shrink:0; }
+    .btn-edit:hover { background:rgba(124,108,255,.15); color:#a78bfa; border-color:rgba(124,108,255,.4); }
+
+    .btn-checkout { padding:6px 11px; border-radius:7px; background:transparent; border:1px solid rgba(220,38,38,.35); color:var(--red); cursor:pointer; font-size:12px; font-weight:500; white-space:nowrap; transition:all .15s; flex-shrink:0; }
+    .btn-checkout:hover    { background:rgba(220,38,38,.15); }
+    .btn-checkout:disabled { opacity:.45; cursor:default; }
+
+    .btn-logout { padding:6px 14px; background:transparent; border:1px solid var(--b2); border-radius:8px; color:var(--muted2); font-size:12px; cursor:pointer; transition:all .15s; }
+    .btn-logout:hover { border-color:rgba(220,38,38,.4); color:var(--red); }
+
+    .conn-dot { width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; }
+    .conn-dot.on  { background:var(--green); }
+    .conn-dot.off { background:var(--red); animation:pulse-red 1.4s infinite; }
+
+    /* Guardian info under child name */
+    .guardian-info { font-size:11px; color:var(--muted2); margin-top:3px; line-height:1.5; }
+
+    /* ── Login ────────────────────────────────────────── */
+    #login-view  { min-height:100vh; display:flex; align-items:center; justify-content:center; }
+    .login-card  { width:360px; padding:36px; background:var(--s1); border:1px solid var(--b2); border-radius:16px; animation:fadein .4s ease both; }
+    .login-title { font-size:22px; font-weight:700; margin-bottom:6px; }
+    .login-sub   { font-size:13px; color:var(--muted2); margin-bottom:28px; }
+    .login-fld   { margin-bottom:14px; }
+    .error-msg   { font-size:13px; color:var(--red); margin-top:10px; text-align:center; }
+
+    /* ── Modal ────────────────────────────────────────── */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.65); display:flex; align-items:center; justify-content:center; z-index:200; }
+    .modal-card    { width:460px; padding:32px; background:var(--s1); border:1px solid var(--b2); border-radius:16px; animation:modal-in .2s ease both; max-height:90vh; overflow-y:auto; }
+    .modal-title   { font-size:18px; font-weight:700; margin-bottom:4px; }
+    .modal-sub     { font-size:12px; color:var(--muted2); margin-bottom:24px; }
+    .modal-fields  { display:flex; flex-direction:column; gap:14px; }
+    .modal-actions { display:flex; gap:10px; margin-top:24px; }
+    .btn-cancel    { flex:1; padding:10px; border-radius:10px; background:transparent; border:1px solid var(--b2); color:var(--muted2); cursor:pointer; font-size:13px; font-weight:500; transition:all .15s; }
+    .btn-cancel:hover { border-color:var(--b3); color:var(--txt); }
+    .btn-save      { flex:2; padding:10px; border-radius:10px; background:linear-gradient(135deg,#6c63ff,#a78bfa); border:none; color:#fff; font-size:13px; font-weight:600; cursor:pointer; transition:opacity .2s; }
+    .btn-save:hover    { opacity:.85; }
+    .btn-save:disabled { opacity:.5; cursor:default; }
+
+    /* ── Lobby layout ─────────────────────────────────── */
+    #lobby-view    { min-height:100vh; display:flex; flex-direction:column; padding-bottom:48px; }
+    #lobby-header  { padding:36px 52px 28px; display:flex; align-items:flex-end; justify-content:space-between; border-bottom:1px solid var(--b1); margin-bottom:8px; }
+    .lby-sub       { font-size:11px; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; margin-bottom:8px; }
+    .lby-main      { font-size:34px; font-weight:700; letter-spacing:-.025em; }
+    #lobby-clock   { font-size:40px; font-family:var(--mono); font-weight:500; letter-spacing:-.04em; }
+    #lobby-cnt     { font-size:12px; color:var(--muted); margin-top:4px; text-align:right; }
+
+    .legend      { padding:8px 52px 20px; display:flex; gap:22px; }
+    .leg-item    { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted2); }
+    .leg-dot     { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
+
+    #lobby-list  { padding:0 52px; display:flex; flex-direction:column; gap:7px; }
+    .lby-row     { display:grid; grid-template-columns:40px 12px 1fr 200px 150px; align-items:center; gap:20px; padding:20px 26px; border-radius:14px; background:var(--s2); border:1px solid var(--b1); animation:fadein .3s ease both; }
+    .lby-row.alt     { background:transparent; }
+    .lby-row.crit    { background:rgba(220,38,38,.03); }
+    .lby-row.expired { border-color:rgba(220,38,38,.2); animation:blink-row 2s infinite; }
+
+    .lby-rank  { font-size:15px; font-family:var(--mono); color:var(--muted); text-align:right; }
+    .lby-dot   { width:11px; height:11px; border-radius:50%; flex-shrink:0; display:inline-block; }
+    .lby-name  { font-size:20px; font-weight:600; margin-bottom:9px; }
+    .lby-ctx   { font-size:13px; color:var(--muted2); text-align:center; }
+    .lby-timer { font-family:var(--mono); font-size:32px; font-weight:700; letter-spacing:-.04em; text-align:right; display:block; }
+    .lby-timer.doldu { font-size:18px; padding:4px 12px; border-radius:8px; background:rgba(220,38,38,.13); color:var(--red); animation:pulse-red 1.4s infinite; display:inline-block; }
+
+    .empty { text-align:center; padding:80px 0; color:var(--muted); }
+    .empty-icon { font-size:38px; margin-bottom:12px; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal-root"></div>
+
+<script>
+/* ================================================================
+   CONFIG
+================================================================ */
+const VIEW = new URLSearchParams(location.search).get('view') || 'admin';
+
+/* ================================================================
+   STATE
+================================================================ */
+let children    = [];
+let isAuth      = false;
+let isConnected = false;
+let loginError  = '';
+
+const alertedIds = new Set();
+let connection   = null;
+let tickId       = null;
+
+/* ================================================================
+   UTILITIES
+================================================================ */
+function toUtcDate(s) {
+  if (!s) return new Date();
+  return new Date(s.endsWith('Z') ? s : s + 'Z');
+}
+
+function remaining(child) {
+  const elapsed = (Date.now() - toUtcDate(child.startedAt).getTime()) / 60000;
+  return Math.max(0, child.duration - elapsed);
+}
+
+function formatTime(m) {
+  if (m <= 0) return '00:00';
+  let mm = Math.floor(m);
+  let ss = Math.round((m - mm) * 60);
+  if (ss === 60) { ss = 0; mm += 1; }
+  return `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+}
+
+function colorFor(r) {
+  if (r <= 1) return 'rgb(220,38,38)';
+  if (r <= 5) return 'rgb(249,115,22)';
+  return 'rgb(52,199,89)';
+}
+
+function pct(child) {
+  return Math.max(0, Math.min(1, remaining(child) / child.duration));
+}
+
+function sortedChildren() {
+  return [...children].sort((a, b) => remaining(a) - remaining(b));
+}
+
+function clockStr() {
+  return new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ================================================================
+   SOUND
+================================================================ */
+let audioCtx = null;
+function beep() {
+  try {
+    audioCtx ??= new AudioContext();
+    const osc = audioCtx.createOscillator();
+    const g   = audioCtx.createGain();
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.frequency.value = 880;
+    g.gain.setValueAtTime(0.4, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1);
+    osc.start(); osc.stop(audioCtx.currentTime + 1);
+  } catch {}
+}
+
+/* ================================================================
+   API
+================================================================ */
+async function apiFetch(method, path, body) {
+  const res = await fetch('/api' + path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { ok: res.ok, status: res.status, data: res.ok && res.status !== 204 ? await res.json() : null };
+}
+
+async function loadChildren() {
+  const r = await apiFetch('GET', '/children');
+  if (r.ok) children = r.data ?? [];
+}
+
+async function checkAuth() {
+  const r = await apiFetch('GET', '/account/me');
+  isAuth = r.ok && r.data?.isAuthenticated === true;
+}
+
+async function doLogin(email, password) {
+  const r = await apiFetch('POST', '/account/login', { email, password });
+  if (r.ok) { isAuth = true; loginError = ''; }
+  else loginError = 'Hatalı kullanıcı adı veya şifre.';
+  return r.ok;
+}
+
+async function doLogout() {
+  await apiFetch('POST', '/account/logout');
+  isAuth = false;
+}
+
+async function addChild(name, duration, guardianName, guardianPhone) {
+  return apiFetch('POST', '/children', { name, duration: +duration, guardianName, guardianPhone });
+}
+
+async function updateChild(id, name, duration, guardianName, guardianPhone) {
+  return apiFetch('PUT', `/children/${id}`, { name, duration: +duration, guardianName, guardianPhone });
+}
+
+async function removeChild(id) {
+  return apiFetch('DELETE', `/children/${id}`);
+}
+
+/* ================================================================
+   SIGNALR
+================================================================ */
+async function connectHub() {
+  if (typeof signalR === 'undefined') return;
+
+  connection = new signalR.HubConnectionBuilder()
+    .withUrl('/hubs/playground')
+    .withAutomaticReconnect()
+    .build();
+
+  connection.on('ChildAdded', child => {
+    if (!children.find(c => c.id === child.id)) children.push(child);
+    fullRender();
+  });
+
+  connection.on('ChildRemoved', id => {
+    children = children.filter(c => c.id !== id);
+    fullRender();
+  });
+
+  connection.on('ChildUpdated', updated => {
+    const idx = children.findIndex(c => c.id === updated.id);
+    if (idx !== -1) children[idx] = updated;
+    fullRender();
+  });
+
+  connection.onreconnected(() => { isConnected = true;  updateConnDot(); });
+  connection.onclose(()      => { isConnected = false; updateConnDot(); });
+
+  try { await connection.start(); isConnected = true; }
+  catch { isConnected = false; }
+}
+
+/* ================================================================
+   TICK — targeted DOM updates
+================================================================ */
+function checkAlerts() {
+  children.forEach(child => {
+    if (remaining(child) <= 0 && !alertedIds.has(child.id)) {
+      alertedIds.add(child.id);
+      beep();
+    }
+  });
+}
+
+function updateAdminTimers() {
+  children.forEach(child => {
+    const r   = remaining(child);
+    const exp = r <= 0;
+    const col = colorFor(r);
+    const p   = pct(child);
+
+    const dot = document.getElementById(`dot-${child.id}`);
+    if (dot) { dot.style.background = col; dot.style.animation = r <= 1 ? 'pulse-red 1.4s infinite' : 'none'; }
+
+    const bar = document.getElementById(`bar-${child.id}`);
+    if (bar) { bar.style.width = `${p * 100}%`; bar.style.background = col; }
+
+    const timer = document.getElementById(`timer-${child.id}`);
+    if (timer) {
+      if (exp) { timer.textContent = 'DOLDU'; timer.className = 'timer doldu'; }
+      else     { timer.textContent = formatTime(r); timer.className = 'timer'; timer.style.color = col; }
+    }
+
+    const row = document.getElementById(`row-${child.id}`);
+    if (row && exp) row.classList.add('expired');
+  });
+
+  const expCnt  = children.filter(c => remaining(c) <= 0).length;
+  const soonCnt = children.filter(c => { const r = remaining(c); return r > 0 && r <= 10; }).length;
+  const $  = id => document.getElementById(id);
+  if ($('stat-active'))  $('stat-active').textContent  = children.length;
+  if ($('stat-soon'))    $('stat-soon').textContent    = soonCnt;
+  if ($('stat-expired')) $('stat-expired').textContent = expCnt;
+}
+
+function updateLobbyTimers() {
+  children.forEach(child => {
+    const r   = remaining(child);
+    const exp = r <= 0;
+    const col = colorFor(r);
+    const p   = pct(child);
+
+    const dot = document.getElementById(`ldot-${child.id}`);
+    if (dot) { dot.style.background = col; dot.style.animation = r <= 1 ? 'pulse-red 1.4s infinite' : 'none'; }
+
+    const bar = document.getElementById(`lbar-${child.id}`);
+    if (bar) { bar.style.width = `${p * 100}%`; bar.style.background = col; }
+
+    const ctx = document.getElementById(`lctx-${child.id}`);
+    if (ctx) {
+      ctx.innerHTML = exp
+        ? `<span style="color:var(--red);font-weight:600">Süre doldu!</span>`
+        : `<strong style="color:${col}">${Math.round(p * 100)}%</strong> kaldı (${child.duration}dk paket)`;
+    }
+
+    const timer = document.getElementById(`ltimer-${child.id}`);
+    if (timer) {
+      if (exp) { timer.textContent = 'DOLDU'; timer.className = 'lby-timer doldu'; }
+      else     { timer.textContent = formatTime(r); timer.className = 'lby-timer'; timer.style.color = col; }
+    }
+
+    const row = document.getElementById(`lrow-${child.id}`);
+    if (row && exp) { row.className = 'lby-row expired'; }
+  });
+
+  const el = document.getElementById('lobby-clock');
+  if (el) el.textContent = clockStr();
+}
+
+function updateConnDot() {
+  const el = document.getElementById('conn-dot');
+  if (el) el.className = 'conn-dot ' + (isConnected ? 'on' : 'off');
+}
+
+/* ================================================================
+   MODAL — Edit child
+================================================================ */
+function showEditModal(childId) {
+  const child = children.find(c => c.id === childId);
+  if (!child) return;
+
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-title">Çocuk Bilgilerini Düzenle</div>
+      <div class="modal-sub">Değişiklikler tüm ekranlara anında yansır.</div>
+
+      <div class="modal-fields">
+        <div>
+          <div class="lbl">Çocuğun Adı</div>
+          <input id="m-name" class="inp" value="${esc(child.name)}">
+        </div>
+        <div>
+          <div class="lbl">Veli Adı</div>
+          <input id="m-guardian" class="inp" value="${esc(child.guardianName || '')}">
+        </div>
+        <div>
+          <div class="lbl">Veli Tel No</div>
+          <input id="m-phone" class="inp" type="tel" placeholder="05xx xxx xx xx" value="${esc(child.guardianPhone || '')}">
+        </div>
+        <div>
+          <div class="lbl" id="m-dur-lbl">Süre — ${child.duration} dakika</div>
+          <input id="m-dur" type="range" min="15" max="120" step="5" value="${child.duration}" style="width:100%;accent-color:#7c6cff">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px">
+            <span>15 dk</span><span>120 dk</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="m-cancel" class="btn-cancel">İptal</button>
+        <button id="m-save"   class="btn-save">Kaydet</button>
+      </div>
+    </div>
+  </div>`;
+
+  // Duration slider label
+  document.getElementById('m-dur').addEventListener('input', e => {
+    document.getElementById('m-dur-lbl').textContent = `Süre — ${e.target.value} dakika`;
+  });
+
+  // Close on overlay click
+  document.getElementById('modal-overlay').addEventListener('click', e => {
+    if (e.target.id === 'modal-overlay') hideModal();
+  });
+
+  // Cancel
+  document.getElementById('m-cancel').addEventListener('click', hideModal);
+
+  // Save
+  document.getElementById('m-save').addEventListener('click', async () => {
+    const name     = document.getElementById('m-name').value.trim();
+    const guardian = document.getElementById('m-guardian').value.trim();
+    const phone    = document.getElementById('m-phone').value.trim();
+    const dur      = +document.getElementById('m-dur').value;
+
+    if (!name) { document.getElementById('m-name').focus(); return; }
+
+    const saveBtn = document.getElementById('m-save');
+    saveBtn.disabled = true; saveBtn.textContent = 'Kaydediliyor…';
+
+    const r = await updateChild(child.id, name, dur, guardian, phone);
+    if (r.ok) {
+      await loadChildren();
+      hideModal();
+      fullRender();
+    } else {
+      saveBtn.disabled = false; saveBtn.textContent = 'Kaydet';
+    }
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', handleModalKey);
+  document.getElementById('m-name').focus();
+}
+
+function handleModalKey(e) {
+  if (e.key === 'Escape') {
+    hideModal();
+  }
+}
+
+function hideModal() {
+  document.removeEventListener('keydown', handleModalKey);
+  document.getElementById('modal-root').innerHTML = '';
+}
+
+/* ================================================================
+   FULL RENDERS
+================================================================ */
+function fullRender() {
+  hideModal();
+  const app = document.getElementById('app');
+  if (VIEW === 'lobby')  { app.innerHTML = lobbyHTML();  return; }
+  if (!isAuth)           { app.innerHTML = loginHTML();  attachLoginHandlers(); return; }
+  app.innerHTML = adminHTML(); attachAdminHandlers();
+}
+
+/* ================================================================
+   LOGIN HTML
+================================================================ */
+function loginHTML() {
+  return `
+  <div id="login-view">
+    <div class="login-card">
+      <div class="login-title">🏃 Oyun Alanı</div>
+      <div class="login-sub">Yönetici paneline giriş yapın</div>
+      <div class="login-fld">
+        <div class="lbl">E-posta</div>
+        <input id="li-email" class="inp" type="email" placeholder="admin@oyunalani.local" autocomplete="username">
+      </div>
+      <div class="login-fld">
+        <div class="lbl">Şifre</div>
+        <input id="li-pass" class="inp" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button id="li-btn" class="btn-add" style="margin-top:8px">Giriş Yap</button>
+      ${loginError ? `<div class="error-msg">${esc(loginError)}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function attachLoginHandlers() {
+  const emailEl = document.getElementById('li-email');
+  const passEl  = document.getElementById('li-pass');
+  const btn     = document.getElementById('li-btn');
+
+  async function tryLogin() {
+    btn.disabled = true; btn.textContent = 'Giriş yapılıyor…';
+    const ok = await doLogin(emailEl.value, passEl.value);
+    if (ok) { await loadChildren(); fullRender(); }
+    else    { btn.disabled = false; btn.textContent = 'Giriş Yap'; fullRender(); }
+  }
+
+  btn.addEventListener('click', tryLogin);
+  passEl.addEventListener('keydown', e => e.key === 'Enter' && tryLogin());
+  emailEl.focus();
+}
+
+/* ================================================================
+   ADMIN HTML
+================================================================ */
+function adminHTML() {
+  const sorted  = sortedChildren();
+  const expCnt  = children.filter(c => remaining(c) <= 0).length;
+  const soonCnt = children.filter(c => { const r = remaining(c); return r > 0 && r <= 10; }).length;
+
+  const rowsHTML = sorted.length === 0
+    ? `<div class="empty"><div class="empty-icon">🎈</div><div>Henüz çocuk eklenmedi</div><div style="font-size:12px;margin-top:5px">Soldaki panelden yeni çocuk ekleyin</div></div>`
+    : `<div class="col-hdr">
+         <span>#</span><span></span><span>Çocuk / Veli</span><span>İlerleme</span>
+         <span style="text-align:right">Kalan</span><span style="text-align:right">İşlemler</span>
+       </div>
+       ${sorted.map((child, i) => {
+         const r   = remaining(child);
+         const exp = r <= 0;
+         const col = colorFor(r);
+         const p   = pct(child);
+
+         const guardianLine = (child.guardianName || child.guardianPhone)
+           ? `<div class="guardian-info">
+                ${child.guardianName  ? `👤 ${esc(child.guardianName)}` : ''}
+                ${child.guardianName && child.guardianPhone ? ' &nbsp;·&nbsp; ' : ''}
+                ${child.guardianPhone ? `📞 ${esc(child.guardianPhone)}` : ''}
+              </div>`
+           : '';
+
+         return `
+         <div id="row-${child.id}" class="child-row${exp ? ' expired' : ''}" style="animation-delay:${i * .04}s">
+           <span class="rank">${i + 1}</span>
+           <span id="dot-${child.id}" class="dot" style="background:${col};animation:${r<=1?'pulse-red 1.4s infinite':'none'}"></span>
+           <div>
+             <div style="font-size:14px;font-weight:500">${esc(child.name)}</div>
+             ${guardianLine}
+           </div>
+           <div>
+             <div class="bar-track"><div id="bar-${child.id}" class="bar-fill" style="width:${p*100}%;background:${col}"></div></div>
+             <div class="bar-lbls"><span>0</span><span>${child.duration}dk</span></div>
+           </div>
+           <span id="timer-${child.id}" class="timer${exp?' doldu':''}" style="${exp?'':'color:'+col}">
+             ${exp ? 'DOLDU' : formatTime(r)}
+           </span>
+           <div class="row-actions">
+             <button class="btn-edit"     data-id="${child.id}" title="Düzenle">✏️</button>
+             <button class="btn-checkout" data-id="${child.id}">Çıkış Yap</button>
+           </div>
+         </div>`;
+       }).join('')}`;
+
+  return `
+  <div id="admin-layout">
+    <header id="admin-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="conn-dot" class="conn-dot ${isConnected?'on':'off'}"></span>
+        <span style="font-weight:600;font-size:14px">🏃 Oyun Alanı — Admin Paneli</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onclick="window.open('?view=lobby','_blank')" style="padding:6px 14px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--muted2);font-size:12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--b3)';this.style.color='var(--txt)'" onmouseout="this.style.borderColor='var(--b2)';this.style.color='var(--muted2)'">
+          🖥️ Bekleme Salonu
+        </button>
+        <button id="logout-btn" class="btn-logout">Çıkış</button>
+      </div>
+    </header>
+
+    <div id="admin-body">
+      <aside id="admin-sidebar">
+        <div>
+          <div class="lbl">Çocuğun Adı</div>
+          <input id="ch-name" class="inp" placeholder="Adı girin…">
+        </div>
+        <div>
+          <div class="lbl">Veli Adı</div>
+          <input id="ch-guardian" class="inp" placeholder="Veli adı (opsiyonel)">
+        </div>
+        <div>
+          <div class="lbl">Veli Tel No</div>
+          <input id="ch-phone" class="inp" type="tel" placeholder="05xx xxx xx xx">
+        </div>
+        <div>
+          <div class="lbl" id="dur-lbl">Süre — 60 dakika</div>
+          <input id="ch-dur" type="range" min="15" max="120" step="5" value="60" style="width:100%;accent-color:#7c6cff">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px">
+            <span>15 dk</span><span>120 dk</span>
+          </div>
+        </div>
+        <button id="add-btn" class="btn-add">+ Çocuk Ekle</button>
+        <hr class="divider">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="stat-pill"><span class="stat-lbl">Aktif çocuk</span><span id="stat-active" class="stat-val">${children.length}</span></div>
+          <div class="stat-pill"><span class="stat-lbl">Son 10 dakika</span><span id="stat-soon" class="stat-val" style="color:var(--orange)">${soonCnt}</span></div>
+          <div class="stat-pill"><span class="stat-lbl">Süresi dolan</span><span id="stat-expired" class="stat-val" style="color:var(--red)">${expCnt}</span></div>
+        </div>
+      </aside>
+
+      <main id="admin-main">${rowsHTML}</main>
+    </div>
+  </div>`;
+}
+
+function attachAdminHandlers() {
+  const nameEl     = document.getElementById('ch-name');
+  const guardianEl = document.getElementById('ch-guardian');
+  const phoneEl    = document.getElementById('ch-phone');
+  const durEl      = document.getElementById('ch-dur');
+  const durLbl     = document.getElementById('dur-lbl');
+  const addBtn     = document.getElementById('add-btn');
+
+  durEl?.addEventListener('input', () => {
+    if (durLbl) durLbl.textContent = `Süre — ${durEl.value} dakika`;
+  });
+
+  addBtn?.addEventListener('click', async () => {
+    const name     = nameEl?.value.trim();
+    const guardian = guardianEl?.value.trim() ?? '';
+    const phone    = phoneEl?.value.trim() ?? '';
+    const dur      = durEl?.value ?? 60;
+    if (!name) { nameEl?.focus(); return; }
+    addBtn.disabled = true;
+    const r = await addChild(name, dur, guardian, phone);
+    if (r.ok) {
+      await loadChildren();
+      fullRender();
+      document.getElementById('ch-name')?.focus();
+    } else {
+      addBtn.disabled = false;
+    }
+  });
+
+  nameEl?.addEventListener('keydown', e => e.key === 'Enter' && addBtn?.click());
+
+  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+    await doLogout(); fullRender();
+  });
+
+  document.querySelectorAll('.btn-edit').forEach(btn => {
+    btn.addEventListener('click', () => showEditModal(+btn.dataset.id));
+  });
+
+  document.querySelectorAll('.btn-checkout').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = +btn.dataset.id;
+      btn.disabled = true;
+      const r = await removeChild(id);
+      if (r.ok) {
+        children = children.filter(c => c.id !== id);
+        fullRender();
+      } else {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+/* ================================================================
+   LOBBY HTML
+================================================================ */
+function lobbyHTML() {
+  const sorted = sortedChildren();
+
+  const listHTML = sorted.length === 0
+    ? `<div class="empty" style="font-size:15px">Şu an oyun alanında çocuk bulunmuyor.</div>`
+    : sorted.map((child, i) => {
+        const r   = remaining(child);
+        const exp = r <= 0;
+        const col = colorFor(r);
+        const p   = pct(child);
+
+        let cls = 'lby-row';
+        if (exp)        cls += ' expired';
+        else if (r <= 1) cls += ' crit';
+        else if (i % 2) cls += ' alt';
+
+        return `
+        <div id="lrow-${child.id}" class="${cls}" style="animation-delay:${i * .05}s">
+          <span class="lby-rank">${i + 1}</span>
+          <span id="ldot-${child.id}" class="lby-dot" style="background:${col};animation:${r<=1?'pulse-red 1.4s infinite':'none'}"></span>
+          <div>
+            <div class="lby-name">${esc(child.name)}</div>
+            <div class="bar-track" style="height:6px">
+              <div id="lbar-${child.id}" class="bar-fill" style="width:${p*100}%;background:${col}"></div>
+            </div>
+          </div>
+          <div id="lctx-${child.id}" class="lby-ctx">
+            ${exp
+              ? `<span style="color:var(--red);font-weight:600">Süre doldu!</span>`
+              : `<strong style="color:${col}">${Math.round(p*100)}%</strong> kaldı (${child.duration}dk paket)`}
+          </div>
+          <div style="text-align:right">
+            <span id="ltimer-${child.id}" class="lby-timer${exp?' doldu':''}" style="${exp?'':'color:'+col}">
+              ${exp ? 'DOLDU' : formatTime(r)}
+            </span>
+          </div>
+        </div>`;
+      }).join('');
+
+  return `
+  <div id="lobby-view">
+    <header id="lobby-header">
+      <div>
+        <div class="lby-sub">🏃 Oyun Alanı</div>
+        <div class="lby-main">Çocuk Takip Ekranı</div>
+      </div>
+      <div>
+        <div id="lobby-clock">${clockStr()}</div>
+        <div id="lobby-cnt">${sorted.length} aktif çocuk</div>
+      </div>
+    </header>
+
+    <div class="legend">
+      <div class="leg-item"><span class="leg-dot" style="background:rgb(52,199,89)"></span>Yeterli süre (&gt;5 dk)</div>
+      <div class="leg-item"><span class="leg-dot" style="background:rgb(249,115,22)"></span>Son 5 dakika</div>
+      <div class="leg-item"><span class="leg-dot" style="background:rgb(220,38,38)"></span>Kritik / Doldu</div>
+    </div>
+
+    <div id="lobby-list">${listHTML}</div>
+  </div>`;
+}
+
+/* ================================================================
+   POLLING — DB'ye direkt yapılan değişiklikleri yakala
+================================================================ */
+function stateKey(arr) {
+  return arr
+    .map(c => `${c.id}|${c.name}|${c.duration}|${c.guardianName}|${c.guardianPhone}`)
+    .sort()
+    .join(';');
+}
+
+async function pollServer() {
+  const r = await apiFetch('GET', '/children');
+  if (!r.ok) return;
+
+  const incoming = r.data ?? [];
+  if (stateKey(incoming) === stateKey(children)) return;
+
+  children = incoming;
+  const modalOpen = !!document.getElementById('modal-root')?.innerHTML;
+  if (!modalOpen) fullRender();
+}
+
+function startPoll() {
+  setInterval(pollServer, 10000);
+}
+
+/* ================================================================
+   TICK
+================================================================ */
+function startTick() {
+  if (tickId) clearInterval(tickId);
+  tickId = setInterval(() => {
+    checkAlerts();
+    if (VIEW === 'lobby')   updateLobbyTimers();
+    else if (isAuth)        updateAdminTimers();
+  }, 1000);
+}
+
+/* ================================================================
+   BOOT
+================================================================ */
+async function boot() {
+  await loadChildren();
+  if (VIEW !== 'lobby') await checkAuth();
+  fullRender();
+  await connectHub();
+  startTick();
+  startPoll();
+  if (VIEW !== 'lobby') updateConnDot();
+}
+
+boot();
+</script>
+</body>
+</html>
