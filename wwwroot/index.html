@@ -98,6 +98,12 @@
     /* Guardian info under child name */
     .guardian-info { font-size:11px; color:var(--muted2); margin-top:3px; line-height:1.5; }
 
+    .btn-print { width:30px; height:30px; border-radius:7px; background:transparent; border:1px solid var(--b2); color:var(--muted2); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; transition:all .15s; flex-shrink:0; }
+    .btn-print:hover { background:rgba(52,199,89,.12); color:var(--green); border-color:rgba(52,199,89,.35); }
+    .btn-settings { width:100%; padding:10px 0; background:transparent; border:1px solid var(--b2); border-radius:10px; color:var(--muted2); font-size:12px; font-weight:500; cursor:pointer; transition:all .15s; }
+    .btn-settings:hover    { border-color:var(--b3); color:var(--txt); }
+    .btn-settings:disabled { opacity:.35; cursor:default; }
+
     /* ── Login ────────────────────────────────────────── */
     #login-view  { min-height:100vh; display:flex; align-items:center; justify-content:center; }
     .login-card  { width:360px; padding:36px; background:var(--s1); border:1px solid var(--b2); border-radius:16px; animation:fadein .4s ease both; }
@@ -174,6 +180,9 @@ let authView    = (() => {
   const p = new URLSearchParams(location.search);
   return (p.get('resetToken') && p.get('email')) ? 'reset' : 'login';
 })();
+
+let appSettings = { responsibilityText: '' };
+let adminPage   = 'main';
 
 const alertedIds = new Set();
 let connection   = null;
@@ -276,7 +285,7 @@ async function checkAuth() {
 
 async function doLogin(email, password) {
   const r = await apiFetch('POST', '/account/login', { email, password });
-  if (r.ok) { isAuth = true; loginError = ''; }
+  if (r.ok) { isAuth = true; loginError = ''; await loadSettings(); }
   else loginError = 'Hatalı kullanıcı adı veya şifre.';
   return r.ok;
 }
@@ -304,6 +313,15 @@ async function updateChild(id, name, duration, guardianName, guardianPhone) {
 
 async function removeChild(id) {
   return apiFetch('DELETE', `/children/${id}`);
+}
+
+async function loadSettings() {
+  const r = await apiFetch('GET', '/settings');
+  if (r.ok) appSettings = r.data ?? { responsibilityText: '' };
+}
+
+async function saveSettings(responsibilityText) {
+  return apiFetch('PUT', '/settings', { responsibilityText });
 }
 
 /* ================================================================
@@ -442,7 +460,7 @@ function showEditModal(childId) {
           <input id="m-name" class="inp" value="${esc(child.name)}">
         </div>
         <div>
-          <div class="lbl">Veli Adı</div>
+          <div class="lbl">Veli Adı <span style="color:var(--red)">*</span></div>
           <input id="m-guardian" class="inp" value="${esc(child.guardianName || '')}">
         </div>
         <div>
@@ -485,7 +503,8 @@ function showEditModal(childId) {
     const phone    = document.getElementById('m-phone').value.trim();
     const dur      = +document.getElementById('m-dur').value;
 
-    if (!name) { document.getElementById('m-name').focus(); return; }
+    if (!name)     { document.getElementById('m-name').focus();     return; }
+    if (!guardian) { document.getElementById('m-guardian').focus(); return; }
 
     const saveBtn = document.getElementById('m-save');
     saveBtn.disabled = true; saveBtn.textContent = 'Kaydediliyor…';
@@ -523,7 +542,8 @@ function fullRender() {
   hideModal();
   const app = document.getElementById('app');
   if (VIEW === 'lobby')  { app.innerHTML = lobbyHTML();  return; }
-  if (!isAuth)           { app.innerHTML = loginHTML();  attachLoginHandlers(); return; }
+  if (!isAuth)                  { app.innerHTML = loginHTML();    attachLoginHandlers();    return; }
+  if (adminPage === 'settings') { app.innerHTML = settingsHTML(); attachSettingsHandlers(); return; }
   app.innerHTML = adminHTML(); attachAdminHandlers();
 }
 
@@ -804,6 +824,7 @@ function adminHTML() {
              ${exp ? 'DOLDU' : formatTime(r)}
            </span>
            <div class="row-actions">
+             <button class="btn-print"    data-id="${child.id}" title="Belge Yazdır">🖨️</button>
              <button class="btn-edit"     data-id="${child.id}" title="Düzenle">✏️</button>
              <button class="btn-checkout" data-id="${child.id}">Çıkış Yap</button>
            </div>
@@ -828,15 +849,15 @@ function adminHTML() {
     <div id="admin-body">
       <aside id="admin-sidebar">
         <div>
-          <div class="lbl">Çocuğun Adı</div>
+          <div class="lbl">Çocuğun Adı <span style="color:var(--red)">*</span></div>
           <input id="ch-name" class="inp" placeholder="Adı girin…">
         </div>
         <div>
-          <div class="lbl">Veli Adı</div>
-          <input id="ch-guardian" class="inp" placeholder="Veli adı (opsiyonel)">
+          <div class="lbl">Veli Adı <span style="color:var(--red)">*</span></div>
+          <input id="ch-guardian" class="inp" placeholder="Veli adını girin">
         </div>
         <div>
-          <div class="lbl">Veli Tel No</div>
+          <div class="lbl">Veli Tel No <span style="color:var(--red)">*</span></div>
           <input id="ch-phone" class="inp" type="tel" placeholder="05xx xxx xx xx">
         </div>
         <div>
@@ -846,6 +867,7 @@ function adminHTML() {
             <span>15 dk</span><span>120 dk</span>
           </div>
         </div>
+        <button id="print-form-btn" class="btn-settings" style="margin-bottom:4px" disabled>🖨️ Sorumluluk Metni</button>
         <button id="add-btn" class="btn-add">+ Çocuk Ekle</button>
         <hr class="divider">
         <div style="display:flex;flex-direction:column;gap:8px">
@@ -853,6 +875,8 @@ function adminHTML() {
           <div class="stat-pill"><span class="stat-lbl">Son 10 dakika</span><span id="stat-soon" class="stat-val" style="color:var(--orange)">${soonCnt}</span></div>
           <div class="stat-pill"><span class="stat-lbl">Süresi dolan</span><span id="stat-expired" class="stat-val" style="color:var(--red)">${expCnt}</span></div>
         </div>
+        <hr class="divider">
+        <button id="settings-btn" class="btn-settings">⚙️ Ayarlar</button>
       </aside>
 
       <main id="admin-main">${rowsHTML}</main>
@@ -868,6 +892,18 @@ function attachAdminHandlers() {
   const durLbl     = document.getElementById('dur-lbl');
   const addBtn     = document.getElementById('add-btn');
 
+  const printFormBtn = document.getElementById('print-form-btn');
+
+  function syncPrintFormBtn() {
+    if (!printFormBtn) return;
+    const ok = !!(nameEl?.value.trim() && guardianEl?.value.trim() && phoneEl?.value.trim());
+    printFormBtn.disabled = !ok;
+  }
+
+  nameEl?.addEventListener('input', syncPrintFormBtn);
+  guardianEl?.addEventListener('input', syncPrintFormBtn);
+  phoneEl?.addEventListener('input', syncPrintFormBtn);
+
   durEl?.addEventListener('input', () => {
     if (durLbl) durLbl.textContent = `Süre — ${durEl.value} dakika`;
   });
@@ -877,7 +913,9 @@ function attachAdminHandlers() {
     const guardian = guardianEl?.value.trim() ?? '';
     const phone    = phoneEl?.value.trim() ?? '';
     const dur      = durEl?.value ?? 60;
-    if (!name) { nameEl?.focus(); return; }
+    if (!name)     { nameEl?.focus();     return; }
+    if (!guardian) { guardianEl?.focus(); return; }
+    if (!phone)    { phoneEl?.focus();    return; }
     addBtn.disabled = true;
     const r = await addChild(name, dur, guardian, phone);
     if (r.ok) {
@@ -893,6 +931,18 @@ function attachAdminHandlers() {
 
   document.getElementById('logout-btn')?.addEventListener('click', async () => {
     await doLogout(); fullRender();
+  });
+
+  document.getElementById('print-form-btn')?.addEventListener('click', () => {
+    printResponsibilityFromForm();
+  });
+
+  document.getElementById('settings-btn')?.addEventListener('click', () => {
+    adminPage = 'settings'; fullRender();
+  });
+
+  document.querySelectorAll('.btn-print').forEach(btn => {
+    btn.addEventListener('click', () => printResponsibility(+btn.dataset.id));
   });
 
   document.querySelectorAll('.btn-edit').forEach(btn => {
@@ -980,6 +1030,181 @@ function lobbyHTML() {
 }
 
 /* ================================================================
+   SETTINGS PAGE
+================================================================ */
+function settingsHTML() {
+  return `
+  <div id="admin-layout">
+    <header id="admin-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-weight:600;font-size:14px">⚙️ Ayarlar</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button id="back-admin-btn" style="padding:6px 14px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--muted2);font-size:12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--b3)';this.style.color='var(--txt)'" onmouseout="this.style.borderColor='var(--b2)';this.style.color='var(--muted2)'">
+          ← Admin Paneli
+        </button>
+        <button id="logout-btn" class="btn-logout">Çıkış</button>
+      </div>
+    </header>
+    <div id="admin-body" style="overflow-y:auto">
+      <div style="max-width:680px;margin:32px auto;padding:0 24px;width:100%">
+        <div style="background:var(--s1);border:1px solid var(--b2);border-radius:14px;padding:28px">
+          <div style="font-size:16px;font-weight:600;margin-bottom:6px">Sorumluluk Metni</div>
+          <div style="font-size:12px;color:var(--muted2);margin-bottom:16px">Bu metin velilere imzalatılan belgeye basılır.</div>
+          <div class="lbl">Metin</div>
+          <textarea id="resp-text" class="inp" style="min-height:220px;resize:vertical;line-height:1.7">${esc(appSettings.responsibilityText || '')}</textarea>
+          <button id="save-settings-btn" class="btn-add" style="margin-top:14px">Kaydet</button>
+          <div id="settings-msg" style="margin-top:10px;font-size:13px"></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function attachSettingsHandlers() {
+  document.getElementById('back-admin-btn')?.addEventListener('click', () => {
+    adminPage = 'main'; fullRender();
+  });
+
+  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+    await doLogout(); fullRender();
+  });
+
+  document.getElementById('save-settings-btn')?.addEventListener('click', async () => {
+    const text = document.getElementById('resp-text').value;
+    const btn  = document.getElementById('save-settings-btn');
+    const msg  = document.getElementById('settings-msg');
+    btn.disabled = true; btn.textContent = 'Kaydediliyor…';
+    const r = await saveSettings(text);
+    if (r.ok) {
+      appSettings = r.data ?? { responsibilityText: text };
+      msg.textContent = '✓ Kaydedildi.';
+      msg.style.color = 'var(--green)';
+    } else {
+      msg.textContent = r.err || 'Bir hata oluştu.';
+      msg.style.color = 'var(--red)';
+    }
+    btn.disabled = false; btn.textContent = 'Kaydet';
+  });
+}
+
+/* ================================================================
+   PRINT
+================================================================ */
+function printResponsibility(childId) {
+  const child = children.find(c => c.id === childId);
+  if (!child) return;
+
+  const escapedText = esc(appSettings.responsibilityText || '').replace(/\n/g, '<br>');
+  const date = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const time = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+  const win = window.open('', '_blank', 'width=750,height=900');
+  if (!win) return;
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Sorumluluk Belgesi</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 50px; max-width: 680px; margin: 0 auto; color: #111; }
+    h2 { text-align: center; font-size: 18px; letter-spacing: 1px; margin-bottom: 32px; text-transform: uppercase; border-bottom: 2px solid #333; padding-bottom: 12px; }
+    .resp-text { line-height: 1.9; margin-bottom: 36px; text-align: justify; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 48px; }
+    td { padding: 10px 8px; border-bottom: 1px solid #ddd; font-size: 14px; }
+    td:first-child { font-weight: bold; width: 160px; color: #555; }
+    .signatures { display: flex; justify-content: space-between; margin-top: 60px; }
+    .sig-box { text-align: center; }
+    .sig-line { border-top: 1px solid #333; width: 200px; margin: 0 auto 10px; }
+    .sig-label { font-size: 13px; color: #555; }
+    .print-btn { display: block; margin: 24px auto 0; padding: 10px 28px; background: #6c63ff; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    @media print { .print-btn { display: none; } }
+  </style>
+</head>
+<body>
+  <h2>Sorumluluk Belgesi</h2>
+  <p class="resp-text">${escapedText}</p>
+  <table>
+    <tr><td>Çocuğun Adı</td><td>${esc(child.name)}</td></tr>
+    <tr><td>Veli Adı</td><td>${esc(child.guardianName || '')}</td></tr>
+    <tr><td>Telefon</td><td>${esc(child.guardianPhone || '')}</td></tr>
+    <tr><td>Tarih / Saat</td><td>${date} — ${time}</td></tr>
+  </table>
+  <div class="signatures">
+    <div class="sig-box">
+      <div class="sig-line"></div>
+      <div class="sig-label">Veli İmzası</div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-line"></div>
+      <div class="sig-label">Yetkili İmzası</div>
+    </div>
+  </div>
+  <button class="print-btn" onclick="window.print()">🖨️ Yazdır</button>
+</body>
+</html>`);
+  win.document.close();
+}
+
+function printResponsibilityFromForm() {
+  const name    = document.getElementById('ch-name')?.value.trim()    ?? '';
+  const guardian= document.getElementById('ch-guardian')?.value.trim() ?? '';
+  const phone   = document.getElementById('ch-phone')?.value.trim()    ?? '';
+
+  const escapedText = esc(appSettings.responsibilityText || '').replace(/\n/g, '<br>');
+  const date = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const time = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+  const win = window.open('', '_blank', 'width=750,height=900');
+  if (!win) return;
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Sorumluluk Belgesi</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 50px; max-width: 680px; margin: 0 auto; color: #111; }
+    h2 { text-align: center; font-size: 18px; letter-spacing: 1px; margin-bottom: 32px; text-transform: uppercase; border-bottom: 2px solid #333; padding-bottom: 12px; }
+    .resp-text { line-height: 1.9; margin-bottom: 36px; text-align: justify; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 48px; }
+    td { padding: 10px 8px; border-bottom: 1px solid #ddd; font-size: 14px; }
+    td:first-child { font-weight: bold; width: 160px; color: #555; }
+    .signatures { display: flex; justify-content: space-between; margin-top: 60px; }
+    .sig-box { text-align: center; }
+    .sig-line { border-top: 1px solid #333; width: 200px; margin: 0 auto 10px; }
+    .sig-label { font-size: 13px; color: #555; }
+    .print-btn { display: block; margin: 24px auto 0; padding: 10px 28px; background: #6c63ff; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    @media print { .print-btn { display: none; } }
+  </style>
+</head>
+<body>
+  <h2>Sorumluluk Belgesi</h2>
+  <p class="resp-text">${escapedText}</p>
+  <table>
+    <tr><td>Çocuğun Adı</td><td>${esc(name)}</td></tr>
+    <tr><td>Veli Adı</td><td>${esc(guardian)}</td></tr>
+    <tr><td>Telefon</td><td>${esc(phone)}</td></tr>
+    <tr><td>Tarih / Saat</td><td>${date} — ${time}</td></tr>
+  </table>
+  <div class="signatures">
+    <div class="sig-box">
+      <div class="sig-line"></div>
+      <div class="sig-label">Veli İmzası</div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-line"></div>
+      <div class="sig-label">Yetkili İmzası</div>
+    </div>
+  </div>
+  <button class="print-btn" onclick="window.print()">🖨️ Yazdır</button>
+</body>
+</html>`);
+  win.document.close();
+}
+
+/* ================================================================
    POLLING — DB'ye direkt yapılan değişiklikleri yakala
 ================================================================ */
 function stateKey(arr) {
@@ -1022,7 +1247,10 @@ function startTick() {
 ================================================================ */
 async function boot() {
   await loadChildren();
-  if (VIEW !== 'lobby') await checkAuth();
+  if (VIEW !== 'lobby') {
+    await checkAuth();
+    if (isAuth) await loadSettings();
+  }
   fullRender();
   await connectHub();
   startTick();

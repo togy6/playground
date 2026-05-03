@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PlaygroundDashboard.Data;
 using PlaygroundDashboard.Hubs;
+using PlaygroundDashboard.Models;
 using PlaygroundDashboard.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -62,7 +63,7 @@ static async Task SeedAsync(WebApplication app)
     var um  = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
     var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
-    await db.Database.EnsureCreatedAsync();
+    await db.Database.MigrateAsync();
 
     var email = cfg["Admin:Email"]    ?? "admin@oyunalani.local";
     var pass  = cfg["Admin:Password"] ?? "Admin123!";
@@ -71,5 +72,18 @@ static async Task SeedAsync(WebApplication app)
     {
         var user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
         await um.CreateAsync(user, pass);
+    }
+
+    if (!await db.Settings.AnyAsync())
+    {
+        db.Settings.Add(new PlaygroundSettings
+        {
+            ResponsibilityText =
+                "Ben, aşağıda adı yazılı çocuğun velisi/vasisi olarak; çocuğumun oyun alanında " +
+                "bulunduğu süre içinde oluşabilecek her türlü kaza, yaralanma veya olaydan dolayı " +
+                "tesisin herhangi bir hukuki sorumluluğu bulunmadığını kabul ve beyan ederim. " +
+                "Çocuğumun sağlık durumunun bu aktiviteye uygun olduğunu teyit ederim."
+        });
+        await db.SaveChangesAsync();
     }
 }

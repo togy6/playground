@@ -35,6 +35,10 @@ public class ChildrenController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(dto.Name))
             return BadRequest("Ad boş olamaz.");
+        if (string.IsNullOrWhiteSpace(dto.GuardianName))
+            return BadRequest("Veli adı boş olamaz.");
+        if (string.IsNullOrWhiteSpace(dto.GuardianPhone))
+            return BadRequest("Veli telefonu boş olamaz.");
 
         var child = new Child
         {
@@ -61,6 +65,10 @@ public class ChildrenController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(dto.Name))
             return BadRequest("Ad boş olamaz.");
+        if (string.IsNullOrWhiteSpace(dto.GuardianName))
+            return BadRequest("Veli adı boş olamaz.");
+        if (string.IsNullOrWhiteSpace(dto.GuardianPhone))
+            return BadRequest("Veli telefonu boş olamaz.");
 
         child.Name          = dto.Name.Trim();
         child.Duration      = Math.Clamp(dto.Duration, 5, 180);

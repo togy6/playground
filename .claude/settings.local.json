@@ -15,7 +15,9 @@
       "Bash(dotnet add *)",
       "Bash(dotnet remove *)",
       "Bash(dotnet build *)",
-      "Bash(Select-String -Pattern \"error CS|warning CS|Build succeeded|Error\\\\\\(s\\\\\\)\")"
+      "Bash(Select-String -Pattern \"error CS|warning CS|Build succeeded|Error\\\\\\(s\\\\\\)\")",
+      "Bash(dotnet ef *)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\Lenovo\\\\source\\\\repos\\\\playground\\\\CLAUDE.md\")"
     ]
   }
 }
