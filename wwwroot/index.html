@@ -104,7 +104,11 @@
     .login-title { font-size:22px; font-weight:700; margin-bottom:6px; }
     .login-sub   { font-size:13px; color:var(--muted2); margin-bottom:28px; }
     .login-fld   { margin-bottom:14px; }
-    .error-msg   { font-size:13px; color:var(--red); margin-top:10px; text-align:center; }
+    .error-msg   { font-size:13px; color:var(--red);   margin-top:10px; text-align:center; }
+    .success-msg { font-size:13px; color:var(--green); margin-top:10px; text-align:center; }
+    .login-links { display:flex; justify-content:space-between; margin-top:16px; }
+    .login-link  { font-size:12px; color:var(--muted2); cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+    .login-link:hover { color:var(--txt); }
 
     /* ── Modal ────────────────────────────────────────── */
     .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.65); display:flex; align-items:center; justify-content:center; z-index:200; }
@@ -165,6 +169,11 @@ let children    = [];
 let isAuth      = false;
 let isConnected = false;
 let loginError  = '';
+let authMsg     = '';
+let authView    = (() => {
+  const p = new URLSearchParams(location.search);
+  return (p.get('resetToken') && p.get('email')) ? 'reset' : 'login';
+})();
 
 const alertedIds = new Set();
 let connection   = null;
@@ -241,7 +250,18 @@ async function apiFetch(method, path, body) {
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
-  return { ok: res.ok, status: res.status, data: res.ok && res.status !== 204 ? await res.json() : null };
+  let data = null, err = null;
+  if (res.status !== 204) {
+    try {
+      const t = await res.text();
+      try { data = JSON.parse(t); } catch { data = t; }
+    } catch {}
+  }
+  if (!res.ok) {
+    err  = Array.isArray(data) ? data.join(' ') : typeof data === 'string' ? data : 'Bir hata oluştu.';
+    data = null;
+  }
+  return { ok: res.ok, status: res.status, data, err };
 }
 
 async function loadChildren() {
@@ -264,6 +284,14 @@ async function doLogin(email, password) {
 async function doLogout() {
   await apiFetch('POST', '/account/logout');
   isAuth = false;
+}
+
+async function doForgotPassword(email) {
+  return apiFetch('POST', '/account/forgot-password', { email });
+}
+
+async function doResetPassword(email, token, newPassword) {
+  return apiFetch('POST', '/account/reset-password', { email, token, newPassword });
 }
 
 async function addChild(name, duration, guardianName, guardianPhone) {
@@ -500,9 +528,13 @@ function fullRender() {
 }
 
 /* ================================================================
-   LOGIN HTML
+   LOGIN / AUTH HTML
 ================================================================ */
 function loginHTML() {
+  if (authView === 'register')   return registerHTML();
+  if (authView === 'forgot')     return forgotHTML();
+  if (authView === 'forgotSent') return forgotSentHTML();
+  if (authView === 'reset')      return resetHTML();
   return `
   <div id="login-view">
     <div class="login-card">
@@ -518,16 +550,109 @@ function loginHTML() {
       </div>
       <button id="li-btn" class="btn-add" style="margin-top:8px">Giriş Yap</button>
       ${loginError ? `<div class="error-msg">${esc(loginError)}</div>` : ''}
+      ${authMsg    ? `<div class="success-msg">${esc(authMsg)}</div>`  : ''}
+      <div class="login-links">
+        <span class="login-link" id="li-forgot">Şifremi unuttum</span>
+        <span class="login-link" id="li-register">Yeni hesap oluştur</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function registerHTML() {
+  return `
+  <div id="login-view">
+    <div class="login-card">
+      <div class="login-title">🏃 Oyun Alanı</div>
+      <div class="login-sub">Yeni hesap oluştur</div>
+      <div class="login-fld">
+        <div class="lbl">E-posta</div>
+        <input id="reg-email" class="inp" type="email" placeholder="ornek@domain.com" autocomplete="username">
+      </div>
+      <div class="login-fld">
+        <div class="lbl">Şifre</div>
+        <input id="reg-pass" class="inp" type="password" placeholder="En az 6 karakter" autocomplete="new-password">
+      </div>
+      <div class="login-fld">
+        <div class="lbl">Şifre Tekrar</div>
+        <input id="reg-pass2" class="inp" type="password" placeholder="Şifreyi tekrar girin" autocomplete="new-password">
+      </div>
+      <button id="reg-btn" class="btn-add" style="margin-top:8px">Hesap Oluştur</button>
+      ${authMsg ? `<div class="${authMsg.startsWith('✓') ? 'success-msg' : 'error-msg'}">${esc(authMsg)}</div>` : ''}
+      <div class="login-links">
+        <span class="login-link" id="back-login">← Girişe dön</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function forgotHTML() {
+  return `
+  <div id="login-view">
+    <div class="login-card">
+      <div class="login-title">🔑 Şifre Yenile</div>
+      <div class="login-sub">E-posta adresinizi girin, şifre yenileme bağlantısı göndereceğiz.</div>
+      <div class="login-fld">
+        <div class="lbl">E-posta</div>
+        <input id="fp-email" class="inp" type="email" placeholder="ornek@domain.com" autocomplete="email">
+      </div>
+      <button id="fp-btn" class="btn-add" style="margin-top:8px">Bağlantı Gönder</button>
+      ${authMsg ? `<div class="error-msg">${esc(authMsg)}</div>` : ''}
+      <div class="login-links">
+        <span class="login-link" id="back-login">← Girişe dön</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function forgotSentHTML() {
+  return `
+  <div id="login-view">
+    <div class="login-card">
+      <div class="login-title">📧 E-posta Gönderildi</div>
+      <div class="login-sub" style="margin-bottom:20px">
+        E-posta adresiniz sistemde kayıtlıysa yenileme bağlantısı gönderildi.
+        Gelen kutunuzu kontrol edin.
+      </div>
+      <div class="login-links" style="justify-content:center">
+        <span class="login-link" id="back-login">← Girişe dön</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function resetHTML() {
+  return `
+  <div id="login-view">
+    <div class="login-card">
+      <div class="login-title">🔑 Yeni Şifre Belirle</div>
+      <div class="login-sub">Hesabınız için yeni bir şifre belirleyin.</div>
+      <div class="login-fld">
+        <div class="lbl">Yeni Şifre</div>
+        <input id="rp-pass" class="inp" type="password" placeholder="En az 6 karakter" autocomplete="new-password">
+      </div>
+      <div class="login-fld">
+        <div class="lbl">Şifre Tekrar</div>
+        <input id="rp-pass2" class="inp" type="password" placeholder="Şifreyi tekrar girin" autocomplete="new-password">
+      </div>
+      <button id="rp-btn" class="btn-add" style="margin-top:8px">Şifremi Güncelle</button>
+      ${authMsg ? `<div class="${authMsg.startsWith('✓') ? 'success-msg' : 'error-msg'}">${esc(authMsg)}</div>` : ''}
     </div>
   </div>`;
 }
 
 function attachLoginHandlers() {
+  if (authView === 'register')   { attachRegisterHandlers();   return; }
+  if (authView === 'forgot')     { attachForgotHandlers();     return; }
+  if (authView === 'forgotSent') { attachForgotSentHandlers(); return; }
+  if (authView === 'reset')      { attachResetHandlers();      return; }
+
   const emailEl = document.getElementById('li-email');
   const passEl  = document.getElementById('li-pass');
   const btn     = document.getElementById('li-btn');
 
   async function tryLogin() {
+    authMsg = '';
     btn.disabled = true; btn.textContent = 'Giriş yapılıyor…';
     const ok = await doLogin(emailEl.value, passEl.value);
     if (ok) { await loadChildren(); fullRender(); }
@@ -536,7 +661,103 @@ function attachLoginHandlers() {
 
   btn.addEventListener('click', tryLogin);
   passEl.addEventListener('keydown', e => e.key === 'Enter' && tryLogin());
+  document.getElementById('li-forgot').addEventListener('click', () => {
+    authView = 'forgot'; authMsg = ''; loginError = ''; fullRender();
+  });
+  document.getElementById('li-register').addEventListener('click', () => {
+    authView = 'register'; authMsg = ''; loginError = ''; fullRender();
+  });
   emailEl.focus();
+}
+
+function attachRegisterHandlers() {
+  const emailEl = document.getElementById('reg-email');
+  const passEl  = document.getElementById('reg-pass');
+  const pass2El = document.getElementById('reg-pass2');
+  const btn     = document.getElementById('reg-btn');
+
+  async function tryRegister() {
+    const email = emailEl.value.trim();
+    const pass  = passEl.value;
+    const pass2 = pass2El.value;
+    if (!email)          { emailEl.focus(); return; }
+    if (pass.length < 6) { authMsg = 'Şifre en az 6 karakter olmalıdır.'; fullRender(); return; }
+    if (pass !== pass2)  { authMsg = 'Şifreler eşleşmiyor.'; fullRender(); return; }
+
+    btn.disabled = true; btn.textContent = 'Oluşturuluyor…';
+    const r = await apiFetch('POST', '/account/register', { email, password: pass });
+    if (r.ok) {
+      authMsg = '✓ Hesap oluşturuldu! Giriş yapabilirsiniz.';
+      authView = 'login'; loginError = ''; fullRender();
+    } else {
+      authMsg = r.err || 'Hesap oluşturulamadı.';
+      btn.disabled = false; btn.textContent = 'Hesap Oluştur'; fullRender();
+    }
+  }
+
+  btn.addEventListener('click', tryRegister);
+  pass2El.addEventListener('keydown', e => e.key === 'Enter' && tryRegister());
+  document.getElementById('back-login').addEventListener('click', () => {
+    authView = 'login'; authMsg = ''; fullRender();
+  });
+  emailEl.focus();
+}
+
+function attachForgotHandlers() {
+  const emailEl = document.getElementById('fp-email');
+  const btn     = document.getElementById('fp-btn');
+
+  async function trySend() {
+    const email = emailEl.value.trim();
+    if (!email) { emailEl.focus(); return; }
+    btn.disabled = true; btn.textContent = 'Gönderiliyor…';
+    await doForgotPassword(email);
+    authView = 'forgotSent'; authMsg = ''; fullRender();
+  }
+
+  btn.addEventListener('click', trySend);
+  emailEl.addEventListener('keydown', e => e.key === 'Enter' && trySend());
+  document.getElementById('back-login').addEventListener('click', () => {
+    authView = 'login'; authMsg = ''; fullRender();
+  });
+  emailEl.focus();
+}
+
+function attachForgotSentHandlers() {
+  document.getElementById('back-login').addEventListener('click', () => {
+    authView = 'login'; authMsg = ''; fullRender();
+  });
+}
+
+function attachResetHandlers() {
+  const passEl  = document.getElementById('rp-pass');
+  const pass2El = document.getElementById('rp-pass2');
+  const btn     = document.getElementById('rp-btn');
+  const params  = new URLSearchParams(location.search);
+  const token   = params.get('resetToken') ?? '';
+  const email   = params.get('email')      ?? '';
+
+  async function tryReset() {
+    const pass  = passEl.value;
+    const pass2 = pass2El.value;
+    if (pass.length < 6) { authMsg = 'Şifre en az 6 karakter olmalıdır.'; fullRender(); return; }
+    if (pass !== pass2)  { authMsg = 'Şifreler eşleşmiyor.'; fullRender(); return; }
+
+    btn.disabled = true; btn.textContent = 'Güncelleniyor…';
+    const r = await doResetPassword(email, token, pass);
+    if (r.ok) {
+      history.replaceState({}, '', '/');
+      authView = 'login'; authMsg = '✓ Şifreniz güncellendi. Giriş yapabilirsiniz.';
+      loginError = ''; fullRender();
+    } else {
+      authMsg = r.err || 'Şifre güncellenemedi. Bağlantı geçersiz veya süresi dolmuş olabilir.';
+      btn.disabled = false; btn.textContent = 'Şifremi Güncelle'; fullRender();
+    }
+  }
+
+  btn.addEventListener('click', tryReset);
+  pass2El.addEventListener('keydown', e => e.key === 'Enter' && tryReset());
+  passEl.focus();
 }
 
 /* ================================================================

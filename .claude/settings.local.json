@@ -3,7 +3,19 @@
     "allow": [
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Lenovo\\\\source\\\\repos\\\\playground\" -Recurse -File)",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "Bash(grep -E \"\\\\.\\(js|ts|jsx|tsx|html|css\\)$\")"
+      "Bash(grep -E \"\\\\.\\(js|ts|jsx|tsx|html|css\\)$\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Lenovo\\\\source\\\\repos\\\\playground\" -Force)",
+      "Bash(Select-Object Name, FullName, Attributes)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\Lenovo\\\\source\\\\repos\\\\playground\\\\wwwroot\" -Recurse -Force | Where-Object { !$_.PSIsContainer } | Select-Object Name)",
+      "PowerShell(tree \"c:\\\\Users\\\\Lenovo\\\\source\\\\repos\\\\playground\" -L 3)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\Lenovo\\\\source\\\\repos\\\\playground\" -Recurse | Select-Object FullName | ForEach-Object { $_.FullName.Replace\\(\"c:\\\\Users\\\\Lenovo\\\\source\\\\repos\\\\playground\\\\\", \"\"\\) } | Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\Lenovo\\\\source\\\\repos\\\\playground\" | Where-Object { -not $_.Attributes.HasFlag\\([System.IO.FileAttributes]::Hidden\\) -and $_.Name -notlike \"bin\" -and $_.Name -notlike \"obj\" -and $_.Name -notlike \"publish\" } | ForEach-Object { Write-Host \"Directory: $\\($_.Name\\)\" -ForegroundColor Green; Get-ChildItem -Path $_.FullName -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name })",
+      "Bash(Select-String -Path \"c:\\\\Users\\\\Lenovo\\\\source\\\\repos\\\\playground\\\\wwwroot\\\\index.html\" -Pattern \"login|Login|giri|Giri\" -SimpleMatch)",
+      "Bash(Select-Object -First 40)",
+      "Bash(dotnet add *)",
+      "Bash(dotnet remove *)",
+      "Bash(dotnet build *)",
+      "Bash(Select-String -Pattern \"error CS|warning CS|Build succeeded|Error\\\\\\(s\\\\\\)\")"
     ]
   }
 }

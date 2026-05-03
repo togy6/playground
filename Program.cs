@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PlaygroundDashboard.Data;
 using PlaygroundDashboard.Hubs;
+using PlaygroundDashboard.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +33,7 @@ builder.Services.ConfigureApplicationCookie(o =>
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+builder.Services.AddScoped<EmailService>();
 
 var app = builder.Build();
 
